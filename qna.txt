@@ -1,0 +1,32 @@
+1. Why does RMSNorm cast to fp32 inside the function, and why cast back at the end? What would go wrong
+   if you computed x.square().mean() directly in bf16?
+Ans. bf16 is a compressed number format that saves memory, but it only tracks 2 to 3 significant digits. 
+     fp32 tracks about 7 significant digits. 
+     To calculate the mean the code squares hundreds or thousands of numbers and adds them all up one by one. 
+     As that running sum grows larger, bf16 starts ignoring the smaller numbers being added to the pile.
+     Because those small numbers get dropped, the final average comes out slightly too low.
+     Because you are dividing by the square root, a small error in the average gets magnified.
+     Every word (token) passing through the model ends up scaled slightly wrong, 
+     and this tiny mistake repeats in every single layer.
+     Converting the numbers to fp32 just for this addition step solves the problem completely.
+     Why cast back at the end?
+     The rest of the network runs in bf16 for speed and memory. 
+     Handing back the original dtype keeps the next matmul and the residual stream in the precision they expect. 
+     The norm is the only place that needs fp32, and it's cheap: just elementwise ops on one tensor.
+
+
+2. Prove the 2/3 factor. A GELU MLP with hidden size 4D has about how many weights, 
+   in terms of D? A SwiGLU with hidden size h has about how many? Solve for h.
+Ans. A GELU MLP is D->4D and 4D->D. so it has 4D^2 + 4D^2 = 8D^2 weights. 
+     A SwiGLU with hidden size h has three matrices (W1, W2, W3), each D*h, so 3Dh weights.
+     Setting them up equal results 3Dh = 8D^2 => h = (2/3)*4D.
+
+3. For our mini config (D = 512), what is hidden exactly? (Watch the two int() calls.)
+Ans. int(512 * 4) = 2048, then 2/3 * 2048 = 1365.33, and int() truncates that to 1365. 
+     So w12 is Linear(512, 2730) and w3 is Linear(1365, 512).
+
+4. Shapes check. At 512px, how many image tokens are there, and what's the total sequence length once you add the text tokens?
+Ans. Going from 512 to 64 is the VAE's /8. Going from 64 to 32 is the 2*2 patching. 
+     So there are 32 * 32 = 1024 image tokens. Adding 256 text tokens gives 1280 tokens total. 
+     That's 2.5 times the length at 256px, and since attention cost grows with length squared, 
+     attention gets about 6 times more expensive.
