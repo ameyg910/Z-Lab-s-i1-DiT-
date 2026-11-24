@@ -30,3 +30,14 @@ Ans. Going from 512 to 64 is the VAE's /8. Going from 64 to 32 is the 2*2 patchi
      So there are 32 * 32 = 1024 image tokens. Adding 256 text tokens gives 1280 tokens total. 
      That's 2.5 times the length at 256px, and since attention cost grows with length squared, 
      attention gets about 6 times more expensive.
+
+(Based on all_remaining_parts_of_models)
+
+1. Parameter count of x_embedder for the mini config: weights plus bias. 
+   Show the arithmetic. Then explain in one or two sentences why it equals a Linear(128, 512).
+Ans. weight: out_ch * in_ch * k * k = 512 * 32 * 2 * 2 = 65,536
+     bias:   512
+     total:  66,048
+     Why that equals Linear(128, 512): each patch is 32 * 2 * 2 = 128 numbers. 
+     The windows don't overlap, and every patch is multiplied by the same weights. 
+     A Linear(128, 512) has 128 * 512 + 512 = 66,048 parameters, the exact same count.
